@@ -1,0 +1,317 @@
+# Блок 6. Визуализация и дашборды
+
+## Зачем визуализация в ИБ?
+
+Данные без визуализации — просто числа. Хороший дашборд позволяет:
+
+- __Быстро оценить ситуацию:__ один взгляд вместо десятка запросов
+- __Заметить аномалии:__ человеческий глаз отлично видит паттерны
+- __Отслеживать тренды:__ графики показывают динамику
+- __Реагировать на инциденты:__ алерты уведомляют о проблемах
+
+__Grafana__ — стандарт индустрии для мониторинга и визуализации. Бесплатная, мощная, с огромной экосистемой.
+
+## Занятие 6.1: Основы Grafana
+
+### Архитектура Grafana
+
+```
+┌─────────────────┐     ┌─────────────────┐
+│   Data Source   │────▶│     Grafana     │
+│   (PostgreSQL)  │     │                 │
+└─────────────────┘     │  ┌───────────┐  │
+                        │  │ Dashboard │  │
+┌─────────────────┐     │  │  ┌─────┐  │  │
+│   Data Source   │────▶│  │  │Panel│  │  │
+│   (Prometheus)  │     │  │  └─────┘  │  │
+└─────────────────┘     │  └───────────┘  │
+                        └─────────────────┘
+```
+
+- __Data Source__ — источник данных (PostgreSQL, Prometheus, Loki и др.)
+- __Dashboard__ — набор панелей на одном экране
+- __Panel__ — отдельная визуализация (график, таблица, счётчик)
+
+### Типы панелей
+
+__Time series__ — графики временных рядов:
+
+- Количество событий по времени
+- Тренды и аномалии
+- Сравнение периодов
+
+__Stat__ — одно большое число:
+
+- Текущее количество активных сессий
+- Процент успешных входов
+- Количество алертов
+
+__Gauge__ — индикатор со шкалой:
+
+- Загрузка системы
+- Процент от порога
+
+__Bar chart__ — столбчатые диаграммы:
+
+- TOP IP-адресов
+- Распределение по категориям
+
+__Table__ — таблицы:
+
+- Детальные данные
+- Последние события
+- TOP-списки
+
+__Pie chart__ — круговые диаграммы:
+
+- Распределение по типам событий
+- Соотношение успешных/неудачных
+
+__Geomap__ — карты:
+
+- Географическое распределение атак
+- Источники трафика
+
+### Работа с PostgreSQL
+
+Grafana использует SQL для получения данных:
+
+```sql
+-- Time series: события по времени
+SELECT
+  $__timeGroup(timestamp, '1h') as time,
+  COUNT(*) as events
+FROM auth_events
+WHERE $__timeFilter(timestamp)
+GROUP BY 1
+ORDER BY 1
+
+-- Stat: общее количество
+SELECT COUNT(*) as total
+FROM auth_events
+WHERE $__timeFilter(timestamp)
+
+-- Table: последние события
+SELECT timestamp, username, source_ip, success
+FROM auth_events
+WHERE $__timeFilter(timestamp)
+ORDER BY timestamp DESC
+LIMIT 100
+```
+
+__Макросы Grafana:__
+
+- `$__timeFilter(column)` — фильтр по выбранному временному диапазону
+- `$__timeGroup(column, interval)` — группировка по времени
+- `$__from` / `$__to` — границы временного диапазона
+
+### Переменные дашборда
+
+Переменные делают дашборд интерактивным:
+
+```sql
+-- Переменная $username (список пользователей)
+SELECT DISTINCT username FROM auth_events
+
+-- Использование в запросе
+SELECT timestamp, source_ip, success
+FROM auth_events
+WHERE username = '$username'
+  AND $__timeFilter(timestamp)
+```
+
+__Типы переменных:__
+
+- __Query__ — значения из запроса к БД
+- __Custom__ — статический список
+- __Interval__ — временные интервалы (1m, 5m, 1h)
+- __Text box__ — ввод пользователя
+
+
+### Provisioning — автоматическая настройка
+
+Grafana можно настраивать через YAML-файлы:
+
+```yaml
+# provisioning/datasources/postgres.yml
+apiVersion: 1
+datasources:
+  - name: PostgreSQL
+    type: postgres
+    url: postgres:5432
+    database: security_logs
+    user: analyst
+    secureJsonData:
+      password: ${DB_PASSWORD}
+    jsonData:
+      sslmode: disable
+      maxOpenConns: 10
+```
+
+```yaml
+# provisioning/dashboards/default.yml
+apiVersion: 1
+providers:
+  - name: 'default'
+    folder: 'Security'
+    type: file
+    options:
+      path: /var/lib/grafana/dashboards
+```
+
+## Занятие 6.2: Алертинг и операционные дашборды
+
+### Alerting в Grafana
+
+Алерты уведомляют о проблемах автоматически:
+
+```yaml
+# Структура алерта
+Alert Rule:
+  - Condition: COUNT(*) > threshold
+  - Evaluation interval: 1m
+  - For: 5m (подтверждение)
+  - Notification: webhook, email, Slack
+```
+
+__Компоненты алертинга:__
+
+- __Alert Rule__ — условие срабатывания
+- __Contact Point__ — куда отправлять уведомления
+- __Notification Policy__ — маршрутизация алертов
+
+### Примеры алертов для ИБ
+
+__Brute-force детекция:__
+
+```sql
+-- Алерт: более 10 неудачных входов за 5 минут с одного IP
+SELECT source_ip, COUNT(*) as failed
+FROM auth_events
+WHERE success = false
+  AND timestamp > NOW() - INTERVAL '5 minutes'
+GROUP BY source_ip
+HAVING COUNT(*) > 10
+```
+
+__Вход в нерабочее время:__
+
+```sql
+-- Алерт: успешный вход между 22:00 и 06:00
+SELECT COUNT(*) as night_logins
+FROM auth_events
+WHERE success = true
+  AND EXTRACT(HOUR FROM timestamp) NOT BETWEEN 6 AND 22
+  AND timestamp > NOW() - INTERVAL '5 minutes'
+```
+
+__Новый IP для критичного пользователя:__
+
+```sql
+-- Алерт: admin вошёл с нового IP
+WITH known_ips AS (
+  SELECT DISTINCT source_ip
+  FROM auth_events
+  WHERE username = 'admin'
+    AND timestamp < NOW() - INTERVAL '1 day'
+)
+SELECT COUNT(*) as new_ip_logins
+FROM auth_events
+WHERE username = 'admin'
+  AND success = true
+  AND source_ip NOT IN (SELECT source_ip FROM known_ips)
+  AND timestamp > NOW() - INTERVAL '5 minutes'
+```
+
+### Принципы SOC-дашбордов
+
+__SOC (Security Operations Center)__ — центр мониторинга безопасности. Дашборды для SOC должны:
+
+__1. Показывать текущую ситуацию__
+
+- Активные алерты
+- Ключевые метрики в реальном времени
+- Статус систем
+
+__2. Помогать в расследовании__
+
+- Drill-down к деталям
+- Фильтрация по параметрам
+- Timeline событий
+
+__3. Не перегружать информацией__
+
+- 5-7 ключевых метрик на экране
+- Цветовая кодировка (красный = плохо)
+- Приоритизация информации
+
+__Типичная структура SOC-дашборда:__
+
+```
+┌─────────────────────────────────────────────────────┐
+│  [Активных алертов: 3]  [Событий/час: 1,234]       │
+├─────────────────────────────────────────────────────┤
+│  ┌─────────────────────┐ ┌─────────────────────┐   │
+│  │ События по времени  │ │ TOP IP по неудачам  │   │
+│  │     (time series)   │ │     (bar chart)     │   │
+│  └─────────────────────┘ └─────────────────────┘   │
+├─────────────────────────────────────────────────────┤
+│  ┌─────────────────────────────────────────────┐   │
+│  │         Последние подозрительные события     │   │
+│  │                   (table)                    │   │
+│  └─────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────┘
+```
+
+## Полезные ресурсы
+
+- [Grafana Documentation](https://grafana.com/docs/grafana/latest/)
+- [Grafana Alerting](https://grafana.com/docs/grafana/latest/alerting/)
+- [PostgreSQL Data Source](https://grafana.com/docs/grafana/latest/datasources/postgres/)
+- [Dashboard Best Practices](https://grafana.com/docs/grafana/latest/dashboards/build-dashboards/best-practices/)
+
+## Практические задания
+
+### Задание 6.1: Дашборд мониторинга аутентификации
+
+Создайте дашборд в Grafana с минимум 4 панелями разных типов:
+
+1. __Time series:__ количество событий аутентификации по времени (успешные vs неудачные)
+2. __Stat:__ общее количество неудачных попыток за выбранный период
+3. __Bar chart:__ TOP-10 IP по количеству неудачных попыток
+4. __Table:__ последние 20 подозрительных событий (неудачные входы)
+
+__Дополнительные требования:__
+
+- Добавьте переменную `$username` для фильтрации по пользователю
+- Все панели должны реагировать на изменение временного диапазона
+- Используйте цветовую кодировку (красный для неудачных событий)
+
+__Чеклист выполнения:__
+
+- [ ] Дашборд создан и доступен в Grafana
+- [ ] Минимум 4 панели разных типов
+- [ ] Переменная для фильтрации работает
+- [ ] Временной фильтр применяется ко всем панелям
+
+### Задание 6.2: Алертинг и SOC-дашборд
+
+Настройте систему алертинга и создайте операционный дашборд:
+
+__Алерты (минимум 2):__
+
+1. Brute-force: более 5 неудачных попыток входа с одного IP за 5 минут
+2. Вход в нерабочее время: успешный вход между 22:00 и 06:00
+
+__SOC-дашборд:__
+
+- Панель с количеством активных алертов
+- Ключевые метрики безопасности
+- Timeline последних событий
+
+__Чеклист выполнения:__
+
+- [ ] Алерт на brute-force настроен
+- [ ] Алерт на нерабочее время настроен
+- [ ] SOC-дашборд содержит ключевые метрики
+- [ ] Алерты отображаются на дашборде
