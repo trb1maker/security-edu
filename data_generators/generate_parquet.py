@@ -276,7 +276,7 @@ def main():
         "--config",
         type=Path,
         default=None,
-        help="Путь к конфигурационному файлу (по умолчанию: <project_root>/solutions/scenario_config.yaml)",
+        help="Путь к конфигурационному файлу (по умолчанию: <project_root>/configs/scenario_config.yaml)",
     )
 
     args = parser.parse_args()
@@ -286,7 +286,7 @@ def main():
 
     # Определить путь к конфигурации
     if args.config is None:
-        config_path = project_root / "solutions" / "scenario_config.yaml"
+        config_path = project_root / "configs" / "scenario_config.yaml"
     else:
         config_path = Path(args.config).resolve()
 
