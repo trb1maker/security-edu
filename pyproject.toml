@@ -9,6 +9,7 @@ dependencies = [
     "duckdb>=1.4.3",
     "ipykernel>=7.1.0",
     "jupyter>=1.1.1",
+    "pandas>=2.3.3",
     "polars>=1.37.0",
     "psycopg2-binary>=2.9.11",
     "pyarrow>=22.0.0",
@@ -20,6 +21,4 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = [
-    "ruff>=0.14.11",
-]
+dev = ["ruff>=0.14.11"]
