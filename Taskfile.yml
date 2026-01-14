@@ -1,0 +1,34 @@
+# yaml-language-server: $schema=https://taskfile.dev/schema.json
+
+version: '3'
+
+tasks:
+  generate-lite:
+    desc: Генерация исторических данных за период инцедента
+    cmd: uv run python -m data_generators.generate_parquet --version lite
+    silent: true
+  
+  generate-full:
+    desc: Генерация исторических данных за весь период
+    cmd: uv run python -m data_generators.generate_parquet --version full
+    silent: true
+
+  upload-s3-lite:
+    desc: Загрузка исторических данных за период инцедента на S3
+    cmd: uv run solutions/upload_to_s3.py --version lite --data-dir data
+    silent: true
+  
+  upload-s3-full:
+    desc: Загрузка исторических данных за весь период на S3
+    cmd: uv run solutions/upload_to_s3.py --version full --data-dir data
+    silent: true
+  
+  download-s3-lite:
+    desc: Скачивание исторических данных за период инцедента из S3
+    cmd: uv run bootstrap.py --version lite
+    silent: true
+  
+  download-s3-full:
+    desc: Скачивание исторических данных за весь период из S3
+    cmd: uv run bootstrap.py --version full
+    silent: true
