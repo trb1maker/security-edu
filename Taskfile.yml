@@ -64,3 +64,16 @@ tasks:
       - docker-compose -f solutions/lesson02/docker-compose.yml down -v
     silent: true
   
+  lesson03-check:
+    desc: Проверка урока 3
+    cmds:
+      - docker-compose -f solutions/lesson01/docker-compose.yml up -d postgres
+      - sleep 5
+      - docker-compose -f solutions/lesson01/docker-compose.yml run --rm data-loader --version lite --table auth_events
+      - docker-compose -f solutions/lesson01/docker-compose.yml run --rm data-loader --version lite --table nginx_logs
+      - docker-compose -f solutions/lesson01/docker-compose.yml run --rm data-loader --version lite --table dns_queries
+      - docker-compose -f solutions/lesson01/docker-compose.yml run --rm data-loader --version lite --table firewall_events
+      - docker exec -i security-postgres psql -U analyst -d security_logs < lesson03/sql/migrations/001_create_indexes.sql
+      - uv run pytest tests/lesson03/test_storage.py
+      - docker-compose -f solutions/lesson01/docker-compose.yml down -v
+    silent: true
