@@ -77,3 +77,14 @@ tasks:
       - uv run pytest tests/lesson03/test_storage.py
       - docker-compose -f solutions/lesson01/docker-compose.yml down -v
     silent: true
+
+  lesson04-check:
+    desc: Проверка урока 4
+    cmds:
+      - |
+        if [ ! -d "data/lite" ]; then
+          echo "Ошибка: данные не найдены. Запустите bootstrap.py для загрузки данных."
+          exit 1
+        fi
+      - uv run pytest tests/lesson04/test_sql_analytics.py -v
+    silent: true
