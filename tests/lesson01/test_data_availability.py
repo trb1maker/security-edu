@@ -65,7 +65,9 @@ def data_versions():
 
 def test_data_directory_exists():
     """Проверка наличия директории data/."""
-    assert DATA_DIR.exists(), f"Директория {DATA_DIR} не найдена. Запустите bootstrap.py для загрузки данных."
+    assert DATA_DIR.exists(), (
+        f"Директория {DATA_DIR} не найдена. Запустите bootstrap.py для загрузки данных."
+    )
 
 
 def test_at_least_one_version_exists(data_versions):
@@ -82,7 +84,7 @@ def test_version_directory_exists(version):
     version_dir = DATA_DIR / version
     if not version_dir.exists():
         pytest.skip(f"Версия {version} не загружена. Пропускаем тест.")
-    
+
     assert version_dir.is_dir(), f"Директория {version_dir} должна быть директорией"
 
 
@@ -92,13 +94,13 @@ def test_manifest_exists(version):
     manifest_path = DATA_DIR / version / "manifest.json"
     if not manifest_path.exists():
         pytest.skip(f"Версия {version} не загружена. Пропускаем тест.")
-    
+
     assert manifest_path.exists(), f"Файл manifest.json не найден в {version}"
-    
+
     # Проверка валидности JSON
     with open(manifest_path) as f:
         manifest = json.load(f)
-    
+
     assert "version" in manifest, "manifest.json должен содержать поле 'version'"
     assert manifest["version"] == version, f"Версия в manifest должна быть {version}"
     assert "files" in manifest, "manifest.json должен содержать поле 'files'"
@@ -106,28 +108,32 @@ def test_manifest_exists(version):
 
 
 @pytest.mark.parametrize("version", ["lite", "full"])
-@pytest.mark.parametrize("data_type", ["auth_events", "nginx_logs", "dns_queries", "firewall_events"])
+@pytest.mark.parametrize(
+    "data_type", ["auth_events", "nginx_logs", "dns_queries", "firewall_events"]
+)
 def test_data_type_directory_exists(version, data_type):
     """Проверка наличия директорий для каждого типа данных."""
     data_type_dir = DATA_DIR / version / data_type
     if not data_type_dir.exists():
         pytest.skip(f"Версия {version} не загружена. Пропускаем тест.")
-    
+
     assert data_type_dir.exists(), f"Директория {data_type_dir} не найдена"
     assert data_type_dir.is_dir(), f"{data_type_dir} должна быть директорией"
 
 
 @pytest.mark.parametrize("version", ["lite", "full"])
-@pytest.mark.parametrize("data_type", ["auth_events", "nginx_logs", "dns_queries", "firewall_events"])
+@pytest.mark.parametrize(
+    "data_type", ["auth_events", "nginx_logs", "dns_queries", "firewall_events"]
+)
 def test_parquet_files_exist(version, data_type):
     """Проверка наличия Parquet-файлов."""
     data_type_dir = DATA_DIR / version / data_type
     if not data_type_dir.exists():
         pytest.skip(f"Версия {version} не загружена. Пропускаем тест.")
-    
+
     # Ищем Parquet-файлы в поддиректориях day=*
     parquet_files = list(data_type_dir.glob("day=*/part-*.parquet"))
-    
+
     assert len(parquet_files) > 0, (
         f"Не найдено Parquet-файлов в {data_type_dir}. "
         "Убедитесь, что данные загружены полностью."
@@ -135,20 +141,22 @@ def test_parquet_files_exist(version, data_type):
 
 
 @pytest.mark.parametrize("version", ["lite", "full"])
-@pytest.mark.parametrize("data_type", ["auth_events", "nginx_logs", "dns_queries", "firewall_events"])
+@pytest.mark.parametrize(
+    "data_type", ["auth_events", "nginx_logs", "dns_queries", "firewall_events"]
+)
 def test_parquet_files_valid(version, data_type):
     """Проверка валидности Parquet-файлов."""
     data_type_dir = DATA_DIR / version / data_type
     if not data_type_dir.exists():
         pytest.skip(f"Версия {version} не загружена. Пропускаем тест.")
-    
+
     # Берем первый найденный файл для проверки
     parquet_files = list(data_type_dir.glob("day=*/part-*.parquet"))
     if not parquet_files:
         pytest.skip(f"Нет Parquet-файлов в {data_type_dir}")
-    
+
     test_file = parquet_files[0]
-    
+
     try:
         # Попытка открыть Parquet-файл
         table = pq.read_table(test_file)
@@ -164,17 +172,17 @@ def test_manifest_files_match_actual_files(version):
     manifest_path = DATA_DIR / version / "manifest.json"
     if not manifest_path.exists():
         pytest.skip(f"Версия {version} не загружена. Пропускаем тест.")
-    
+
     with open(manifest_path) as f:
         manifest = json.load(f)
-    
+
     # Проверяем, что файлы из manifest существуют
     missing_files = []
     for file_info in manifest.get("files", []):
         file_path = DATA_DIR / version / file_info["name"]
         if not file_path.exists():
             missing_files.append(file_info["name"])
-    
+
     assert len(missing_files) == 0, (
         f"Следующие файлы указаны в manifest.json, но отсутствуют на диске: {missing_files}"
     )
@@ -188,24 +196,26 @@ def test_manifest_files_match_actual_files(version):
 def test_docker_compose_file_exists():
     """Проверка наличия docker-compose.yml (задание студента)."""
     compose_file = LESSON01_DIR / "docker-compose.yml"
-    
+
     if not compose_file.exists():
         pytest.skip(
             f"Файл docker-compose.yml не найден в {LESSON01_DIR}. "
             "Это нормально - создайте его согласно заданию 1.2 из README.md. "
             "После создания файла этот тест будет проверять его структуру."
         )
-    
+
     # Если файл существует, проверяем его базовую структуру
     if yaml is None:
         pytest.skip("PyYAML не установлен. Установите: uv sync")
-    
+
     try:
         with open(compose_file) as f:
             compose_data = yaml.safe_load(f)
-        
+
         assert compose_data is not None, "docker-compose.yml не является валидным YAML"
-        assert "services" in compose_data, "docker-compose.yml должен содержать секцию 'services'"
+        assert "services" in compose_data, (
+            "docker-compose.yml должен содержать секцию 'services'"
+        )
         assert "postgres" in compose_data["services"], (
             "docker-compose.yml должен содержать сервис 'postgres'"
         )
@@ -217,23 +227,30 @@ def test_postgres_container_running():
     """Проверка, что контейнер PostgreSQL запущен."""
     try:
         result = subprocess.run(
-            ["docker", "ps", "--filter", "name=security-postgres", "--format", "{{.Names}}"],
+            [
+                "docker",
+                "ps",
+                "--filter",
+                "name=security-postgres",
+                "--format",
+                "{{.Names}}",
+            ],
             capture_output=True,
             text=True,
             timeout=5,
         )
-        
+
         if result.returncode != 0:
             pytest.skip("Docker недоступен или команда docker ps не работает")
-        
+
         containers = result.stdout.strip().split("\n")
         containers = [c for c in containers if c]  # Убираем пустые строки
-        
+
         assert len(containers) > 0, (
             "Контейнер security-postgres не запущен. "
             "Запустите: cd lesson01 && docker compose up -d"
         )
-        
+
         assert "security-postgres" in containers, (
             f"Контейнер security-postgres не найден. Найдены контейнеры: {containers}"
         )
@@ -247,7 +264,7 @@ def test_postgres_connection():
     """Проверка подключения к PostgreSQL."""
     if psycopg2 is None:
         pytest.skip("psycopg2 не установлен. Запустите: uv sync")
-    
+
     try:
         conn = psycopg2.connect(**PG_CONFIG)
         cursor = conn.cursor()
@@ -255,9 +272,11 @@ def test_postgres_connection():
         result = cursor.fetchone()
         cursor.close()
         conn.close()
-        
+
         assert result is not None, "Не удалось получить версию PostgreSQL"
-        assert "PostgreSQL" in result[0], f"Неожиданный ответ от PostgreSQL: {result[0]}"
+        assert "PostgreSQL" in result[0], (
+            f"Неожиданный ответ от PostgreSQL: {result[0]}"
+        )
     except psycopg2.OperationalError as e:
         pytest.fail(
             f"Не удалось подключиться к PostgreSQL: {e}\n"
@@ -272,25 +291,25 @@ def test_postgres_database_exists():
     """Проверка, что база данных существует."""
     if psycopg2 is None:
         pytest.skip("psycopg2 не установлен. Запустите: uv sync")
-    
+
     # Подключаемся к базе postgres для проверки существования целевой БД
     check_config = PG_CONFIG.copy()
     check_config["database"] = "postgres"
-    
+
     try:
         conn = psycopg2.connect(**check_config)
         cursor = conn.cursor()
-        
+
         # Проверяем, что база данных существует
         cursor.execute(
             "SELECT datname FROM pg_database WHERE datname = %s",
-            (PG_CONFIG["database"],)
+            (PG_CONFIG["database"],),
         )
         result = cursor.fetchone()
-        
+
         cursor.close()
         conn.close()
-        
+
         assert result is not None, (
             f"База данных '{PG_CONFIG['database']}' не существует. "
             "Убедитесь, что PostgreSQL запущен с правильными переменными окружения."
@@ -303,18 +322,18 @@ def test_postgres_user_exists():
     """Проверка, что пользователь базы данных существует."""
     if psycopg2 is None:
         pytest.skip("psycopg2 не установлен. Запустите: uv sync")
-    
+
     try:
         conn = psycopg2.connect(**PG_CONFIG)
         cursor = conn.cursor()
-        
+
         # Проверяем текущего пользователя
         cursor.execute("SELECT current_user;")
         result = cursor.fetchone()
-        
+
         cursor.close()
         conn.close()
-        
+
         assert result is not None, "Не удалось получить текущего пользователя"
         assert result[0] == PG_CONFIG["user"], (
             f"Текущий пользователь '{result[0]}' не совпадает с ожидаемым '{PG_CONFIG['user']}'"
@@ -327,11 +346,11 @@ def test_data_loaded_to_postgres():
     """Проверка, что данные загружены в PostgreSQL (задание 1.3)."""
     if psycopg2 is None:
         pytest.skip("psycopg2 не установлен. Запустите: uv sync")
-    
+
     try:
         conn = psycopg2.connect(**PG_CONFIG)
         cursor = conn.cursor()
-        
+
         # Проверяем наличие таблицы auth_events
         cursor.execute("""
             SELECT EXISTS (
@@ -340,25 +359,25 @@ def test_data_loaded_to_postgres():
             )
         """)
         table_exists = cursor.fetchone()[0]
-        
+
         if not table_exists:
             pytest.skip(
                 "Таблица auth_events не существует. "
                 "Выполните задание 1.3: создайте скрипт load_data.py и загрузите данные."
             )
-        
+
         # Проверяем наличие данных
         cursor.execute("SELECT COUNT(*) FROM auth_events")
         row_count = cursor.fetchone()[0]
-        
+
         cursor.close()
         conn.close()
-        
+
         assert row_count > 0, (
             f"Таблица auth_events существует, но пуста ({row_count} строк). "
             "Загрузите данные через скрипт load_data.py (задание 1.3)."
         )
-        
+
         # Минимальное количество данных для версии lite (14 дней * ~50k событий/день = ~700k минимум)
         # Но для теста достаточно проверить, что есть хотя бы какие-то данные
         assert row_count >= 1000, (

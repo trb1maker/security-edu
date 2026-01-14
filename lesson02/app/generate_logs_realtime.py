@@ -190,8 +190,6 @@ def generate_logs_realtime(
         print(f"\nГенерация завершена. Логи сохранены в {output_dir}")
 
 
-
-
 def main():
     """Главная функция."""
     parser = argparse.ArgumentParser(
@@ -246,7 +244,7 @@ def main():
             else:
                 # Если не нашли, используем директорию скрипта как корень
                 project_root = Path(__file__).resolve().parent
-        
+
         config_path = project_root / args.config
     else:
         config_path = args.config

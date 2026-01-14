@@ -7,7 +7,6 @@
 """
 
 import argparse
-import os
 import sys
 from pathlib import Path
 
@@ -32,32 +31,32 @@ def find_project_root() -> Path:
 def load_parquet_to_postgres(data_path: Path, table_name: str) -> None:
     """Загрузить данные из Parquet в PostgreSQL через DuckDB."""
     # TODO: Реализуйте загрузку данных через DuckDB
-    # 
+    #
     # Подсказки:
     # 1. Получите параметры подключения к PostgreSQL из переменных окружения:
     #    - DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD
-    # 
+    #
     # 2. Проверьте наличие Parquet-файлов в data_path:
     #    - Используйте glob для поиска: data_path.glob("day=*/part-*.parquet")
-    # 
+    #
     # 3. Подключитесь к DuckDB:
     #    - duckdb_conn = duckdb.connect()
-    # 
+    #
     # 4. Подключите PostgreSQL через DuckDB:
     #    - Используйте ATTACH с connection string:
     #      attach 'host=... port=... dbname=... user=... password=...' as p (type postgres)
-    # 
+    #
     # 5. Загрузите данные одной командой:
     #    - Используйте CREATE OR REPLACE TABLE ... AS FROM read_parquet(...)
     #    - Пример: create or replace table p.public.{table_name} as from read_parquet('{data_path}');
-    # 
+    #
     # 6. Получите количество загруженных строк:
     #    - Выполните SELECT COUNT(*) FROM p.public.{table_name}
-    # 
+    #
     # Примечание: DuckDB автоматически определит схему из Parquet и создаст таблицу в PostgreSQL
-    
+
     print(f"Загрузка данных из {data_path} в таблицу {table_name}...")
-    
+
     # Ваш код здесь
     pass
 
