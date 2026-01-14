@@ -1,0 +1,49 @@
+# Конфигурация Vector для парсинга dns_queries (BIND query log)
+#
+# TODO: Заполните недостающие части конфигурации
+
+# ============================================================================
+# ИСТОЧНИК: чтение файла логов
+# ============================================================================
+[sources.dns_logs]
+type = "file"
+# TODO: Укажите путь к файлу dns_queries.log
+include = ["/logs/dns_queries.log"]
+read_from = "beginning"
+
+# ============================================================================
+# ТРАНСФОРМАЦИЯ: парсинг BIND query log
+# ============================================================================
+[transforms.parse_dns]
+type = "remap"
+inputs = ["dns_logs"]
+source = '''
+# TODO: Распарсите BIND query log format с помощью parse_regex!
+# Формат: timestamp client @0x... source_ip#port (domain): query: domain IN TYPE +flags (resolver)
+# Пример: 12-Mar-2024 14:23:45.123 client @0x7f9b2c001a00 192.168.1.100#54321 (x7kj2m9p.data-sync.xyz): query: x7kj2m9p.data-sync.xyz IN A +E(0)K (8.8.8.8)
+# Подсказка: используйте именованные группы для извлечения полей
+
+# TODO: Преобразуйте source_port в число
+# Подсказка: используйте to_int!(.source_port)
+
+# TODO: Парсите timestamp
+# Формат BIND: 12-Mar-2024 14:23:45.123
+# Подсказка: используйте parse_timestamp!(.timestamp, format: "%d-%b-%Y %H:%M:%S%.f")
+
+# TODO: Добавьте severity (для DNS обычно "info")
+
+# TODO: Удалите служебные поля (.file, .host, .source_type, .message)
+'''
+
+# ============================================================================
+# ПРИЁМНИК: отправка в PostgreSQL
+# ============================================================================
+[sinks.postgres_dns]
+type = "postgres"
+inputs = ["parse_dns"]
+# TODO: Настройте подключение к PostgreSQL
+# Используйте переменные окружения: ${DB_USER}, ${DB_HOST}, ${DB_PORT}, ${DB_NAME}, ${DB_PASSWORD}
+# Подсказка: пароль нужно включить в URL: postgresql://user:password@host:port/database
+endpoint = "postgresql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}"
+table = "dns_queries"
+healthcheck.enabled = true

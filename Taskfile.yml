@@ -44,3 +44,23 @@ tasks:
       - uv run pytest tests/lesson01/test_data_availability.py
       - docker-compose -f solutions/lesson01/docker-compose.yml down -v
     silent: true
+
+  lesson02-setup:
+    desc: Установка образа Vector
+    cmd: docker pull timberio/vector:0.52.0-alpine
+    silent: true
+  
+  lesson02-check:
+    desc: Проверка урока 2
+    cmds:
+      - task: lesson02-setup
+      - docker-compose -f solutions/lesson02/docker-compose.yml build log-generator
+      - docker-compose -f solutions/lesson02/docker-compose.yml up -d postgres
+      - START_DAY=61 SPEED=3600 DURATION=0.1 docker-compose -f solutions/lesson02/docker-compose.yml up -d log-generator
+      - sleep 5
+      - docker-compose -f solutions/lesson02/docker-compose.yml up -d vector
+      - sleep 15
+      - uv run pytest tests/lesson02/test_vector_config.py
+      - docker-compose -f solutions/lesson02/docker-compose.yml down -v
+    silent: true
+  

@@ -9,6 +9,7 @@ wheels/
 # Virtual environments
 .venv
 .env
+bin/
 
 # OS artifacts
 .DS_Store
