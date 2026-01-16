@@ -10,7 +10,6 @@ wheels/
 .idea
 .venv
 .env
-bin/
 
 # OS artifacts
 .DS_Store
