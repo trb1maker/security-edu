@@ -88,3 +88,14 @@ tasks:
         fi
       - uv run pytest tests/lesson04/test_sql_analytics.py -v
     silent: true
+
+  lesson05-check:
+    desc: Проверка урока 5
+    cmds:
+      - |
+        if [ ! -d "data/lite" ]; then
+          echo "Ошибка: данные не найдены. Запустите bootstrap.py для загрузки данных."
+          exit 1
+        fi
+      - uv run pytest tests/lesson05/test_python_processing.py -v
+    silent: true
