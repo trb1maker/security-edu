@@ -1,0 +1,48 @@
+# Конфигурация Vector для парсинга auth_events (JSON)
+#
+# TODO: Заполните недостающие части конфигурации
+
+# ============================================================================
+# ИСТОЧНИК: чтение файла логов
+# ============================================================================
+[sources.auth_logs]
+type = "file"
+# TODO: Укажите путь к файлу auth_events.log
+include = ["/logs/auth_events.log"]
+read_from = "beginning"
+
+# ============================================================================
+# ТРАНСФОРМАЦИЯ: парсинг JSON
+# ============================================================================
+[transforms.parse_auth]
+type = "remap"
+inputs = ["auth_logs"]
+source = '''
+# TODO: Распарсите JSON из поля .message
+# Подсказка: используйте parse_json!(.message)
+
+# TODO: Преобразуйте timestamp в стандартный формат
+# Подсказка: используйте parse_timestamp!(.timestamp, format: "%+")
+
+# TODO: Добавьте поле severity на основе event_type
+# - login_failure -> "warning"
+# - login_success -> "info"
+# - остальные -> "info"
+# Подсказка: используйте условные операторы if/else
+
+# TODO: Удалите служебные поля Vector (.file, .host, .source_type)
+# Подсказка: используйте del(.field_name)
+'''
+
+# ============================================================================
+# ПРИЁМНИК: отправка в PostgreSQL
+# ============================================================================
+[sinks.postgres_auth]
+type = "postgres"
+inputs = ["parse_auth"]
+# TODO: Настройте подключение к PostgreSQL
+# Используйте переменные окружения: ${DB_USER}, ${DB_HOST}, ${DB_PORT}, ${DB_NAME}, ${DB_PASSWORD}
+# Подсказка: пароль нужно включить в URL: postgresql://user:password@host:port/database
+endpoint = "postgresql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}"
+table = "auth_events"
+healthcheck.enabled = true

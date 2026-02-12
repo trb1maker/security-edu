@@ -12,7 +12,9 @@ import duckdb
 
 PARQUET_PATH = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
-    "lesson03", "data", "auth_events.parquet"
+    "lesson03",
+    "data",
+    "auth_events.parquet",
 )
 
 
@@ -38,7 +40,7 @@ class TestGrafanaQueries:
             GROUP BY ALL
             ORDER BY time
         """).fetchall()
-        
+
         assert len(result) > 0, "Запрос должен вернуть данные"
         # Проверяем структуру
         assert len(result[0]) == 3, "Должно быть 3 колонки: time, successful, failed"
@@ -50,7 +52,7 @@ class TestGrafanaQueries:
             SELECT COUNT(*) as failed_total
             WHERE success = false
         """).fetchone()
-        
+
         assert result is not None
         assert result[0] >= 0, "Количество должно быть неотрицательным"
 
@@ -64,7 +66,7 @@ class TestGrafanaQueries:
             ORDER BY failed_count DESC
             LIMIT 10
         """).fetchall()
-        
+
         assert len(result) <= 10, "Должно быть не более 10 строк"
         # Проверяем сортировку
         if len(result) > 1:
@@ -79,7 +81,7 @@ class TestGrafanaQueries:
             ORDER BY timestamp DESC
             LIMIT 20
         """).fetchall()
-        
+
         assert len(result) <= 20, "Должно быть не более 20 строк"
 
 
@@ -96,7 +98,7 @@ class TestAlertQueries:
             GROUP BY source_ip
             HAVING COUNT(*) > 5
         """).fetchall()
-        
+
         assert isinstance(result, list)
 
     def test_night_login_alert_query(self, has_data):
@@ -107,6 +109,6 @@ class TestAlertQueries:
             WHERE success = true
               AND (EXTRACT(HOUR FROM timestamp) < 6 OR EXTRACT(HOUR FROM timestamp) > 22)
         """).fetchone()
-        
+
         assert result is not None
         assert result[0] >= 0

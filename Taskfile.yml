@@ -1,0 +1,101 @@
+# yaml-language-server: $schema=https://taskfile.dev/schema.json
+
+version: "3"
+
+tasks:
+  generate-lite:
+    desc: Генерация исторических данных за период инцедента
+    cmd: uv run python -m data_generators.generate_parquet --version lite
+    silent: true
+
+  generate-full:
+    desc: Генерация исторических данных за весь период
+    cmd: uv run python -m data_generators.generate_parquet --version full
+    silent: true
+
+  upload-s3-lite:
+    desc: Загрузка исторических данных за период инцедента на S3
+    cmd: uv run solutions/upload_to_s3.py --version lite --data-dir data
+    silent: true
+
+  upload-s3-full:
+    desc: Загрузка исторических данных за весь период на S3
+    cmd: uv run solutions/upload_to_s3.py --version full --data-dir data
+    silent: true
+
+  download-s3-lite:
+    desc: Скачивание исторических данных за период инцедента из S3
+    cmd: uv run bootstrap.py --version lite
+    silent: true
+
+  download-s3-full:
+    desc: Скачивание исторических данных за весь период из S3
+    cmd: uv run bootstrap.py --version full
+    silent: true
+
+  lesson01-check:
+    desc: Проверка урока 1
+    cmds:
+      - docker-compose -f solutions/lesson01/docker-compose.yml up -d postgres
+      - docker-compose -f solutions/lesson01/docker-compose.yml run --rm data-loader --version lite --table auth_events
+      - docker-compose -f solutions/lesson01/docker-compose.yml run --rm data-loader --version lite --table nginx_logs
+      - docker-compose -f solutions/lesson01/docker-compose.yml run --rm data-loader --version lite --table dns_queries
+      - docker-compose -f solutions/lesson01/docker-compose.yml run --rm data-loader --version lite --table firewall_events
+      - uv run pytest tests/lesson01/test_data_availability.py
+      - docker-compose -f solutions/lesson01/docker-compose.yml down -v
+    silent: true
+
+  lesson02-setup:
+    desc: Установка образа Vector
+    cmd: docker pull timberio/vector:0.52.0-alpine
+    silent: true
+  
+  lesson02-check:
+    desc: Проверка урока 2
+    cmds:
+      - task: lesson02-setup
+      - docker-compose -f solutions/lesson02/docker-compose.yml build log-generator
+      - docker-compose -f solutions/lesson02/docker-compose.yml up -d postgres
+      - START_DAY=61 SPEED=3600 DURATION=0.1 docker-compose -f solutions/lesson02/docker-compose.yml up -d log-generator
+      - sleep 5
+      - docker-compose -f solutions/lesson02/docker-compose.yml up -d vector
+      - sleep 15
+      - uv run pytest tests/lesson02/test_vector_config.py
+      - docker-compose -f solutions/lesson02/docker-compose.yml down -v
+    silent: true
+  
+  lesson03-check:
+    desc: Проверка урока 3
+    cmds:
+      - docker-compose -f solutions/lesson01/docker-compose.yml up -d postgres
+      - sleep 5
+      - docker-compose -f solutions/lesson01/docker-compose.yml run --rm data-loader --version lite --table auth_events
+      - docker-compose -f solutions/lesson01/docker-compose.yml run --rm data-loader --version lite --table nginx_logs
+      - docker-compose -f solutions/lesson01/docker-compose.yml run --rm data-loader --version lite --table dns_queries
+      - docker-compose -f solutions/lesson01/docker-compose.yml run --rm data-loader --version lite --table firewall_events
+      - docker exec -i security-postgres psql -U analyst -d security_logs < lesson03/sql/migrations/001_create_indexes.sql
+      - uv run pytest tests/lesson03/test_storage.py
+      - docker-compose -f solutions/lesson01/docker-compose.yml down -v
+    silent: true
+
+  lesson04-check:
+    desc: Проверка урока 4
+    cmds:
+      - |
+        if [ ! -d "data/lite" ]; then
+          echo "Ошибка: данные не найдены. Запустите bootstrap.py для загрузки данных."
+          exit 1
+        fi
+      - uv run pytest tests/lesson04/test_sql_analytics.py -v
+    silent: true
+
+  lesson05-check:
+    desc: Проверка урока 5
+    cmds:
+      - |
+        if [ ! -d "data/lite" ]; then
+          echo "Ошибка: данные не найдены. Запустите bootstrap.py для загрузки данных."
+          exit 1
+        fi
+      - uv run pytest tests/lesson05/test_python_processing.py -v
+    silent: true

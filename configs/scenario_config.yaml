@@ -1,0 +1,68 @@
+# Конфигурация сценария атаки для FinanceFlow
+scenario:
+  name: "FinanceFlow Incident FIN-2024-001"
+  start_date: "2024-01-01"
+  duration_days: 81  # 60 baseline + 14 attack + 7 post-incident
+  base_seed: 42
+  
+  attack_params:
+    target_user: "dev_sergey"
+    attacker_ips: ["203.0.113.42", "198.51.100.77", "45.33.32.156"]
+    c2_domain: "data-sync.xyz"
+    attack_start_day: 61  # Атака начинается на 61-й день
+    
+  normal_traffic:
+    users: ["admin", "analyst", "operator", "user1", "user2", "user3", "developer", "manager"]
+    internal_ips: 
+      - "192.168.1.100"
+      - "192.168.1.101"
+      - "192.168.1.102"
+      - "10.0.0.50"
+      - "10.0.0.51"
+      - "10.0.0.52"
+      - "172.16.0.10"
+      - "172.16.0.11"
+    external_ips:
+      - "8.8.8.8"
+      - "1.1.1.1"
+      - "91.121.87.10"
+      - "185.220.101.1"
+      - "23.129.64.100"
+
+generators:
+  auth:
+    events_per_day_normal: 50000
+    events_per_day_attack: 80000
+    output_format: "parquet"
+    
+  nginx:
+    requests_per_day_normal: 500000
+    requests_per_day_attack: 800000
+    output_format: "parquet"
+    
+  dns:
+    queries_per_day_normal: 200000
+    queries_per_day_attack: 300000
+    output_format: "parquet"
+    
+  firewall:
+    events_per_day_normal: 100000
+    events_per_day_attack: 150000
+    output_format: "parquet"
+
+attack_timeline:
+  # Относительно attack_start_day (день 61)
+  1: {phase: "RECON", intensity: 0.3}
+  2: {phase: "RECON", intensity: 0.5}
+  3: {phase: "RECON", intensity: 0.7}
+  4: {phase: "BRUTEFORCE", intensity: 0.4}
+  5: {phase: "BRUTEFORCE", intensity: 0.7}
+  6: {phase: "BRUTEFORCE", intensity: 0.8}
+  7: {phase: "BRUTEFORCE", intensity: 0.9}
+  8: {phase: "COMPROMISE", intensity: 1.0}
+  9: {phase: "LATERAL", intensity: 0.5}
+  10: {phase: "LATERAL", intensity: 0.6}
+  11: {phase: "LATERAL", intensity: 0.4}
+  12: {phase: "C2_SETUP", intensity: 0.7}
+  13: {phase: "EXFIL", intensity: 0.8}
+  14: {phase: "EXFIL", intensity: 0.9}

@@ -1,5 +1,19 @@
 # Блок 2. Сбор и маршрутизация логов
 
+## Алерт и необходимость централизованного сбора
+
+> Вторник, 14:23. Алексей только что закончил настройку локального стенда, когда в Slack-канале #security-alerts появилось новое сообщение от SIEM-системы: "Multiple failed login attempts detected on payment-gateway from external IP 203.0.113.42".
+>
+> Марина подошла к его рабочему месту. "Видишь проблему? Алерт пришёл, но у нас нет централизованного сбора логов. Денису пришлось вручную подключаться к серверу payment-gateway и смотреть логи. Это занимает время, а время в инциденте — критический ресурс."
+>
+> Алексей кивнул. "А что если таких серверов десятки? И логи в разных форматах?"
+>
+> "Именно", — Марина открыла терминал. — "Вот почему нам нужен сборщик логов. Vector собирает данные из всех источников — файлы, контейнеры, syslog — и отправляет в PostgreSQL. Один формат, одна точка входа. Когда случается инцидент, мы не тратим время на поиск логов — они уже в базе."
+>
+> Она показала на экран. "Сейчас у нас логи разбросаны: nginx пишет в Combined Log Format, приложения — в JSON, DNS-сервер — в BIND query log, фаервол — в CEF. Vector парсит всё это и приводит к единой структуре. Твоя задача — настроить парсеры для каждого формата."
+
+---
+
 ## Проблема: логи везде, порядка нигде
 
 Представьте типичную инфраструктуру компании: веб-серверы пишут логи в `/var/log/nginx/`, приложения — в свои файлы, системные события уходят в syslog, контейнеры выводят в stdout. Каждый источник использует свой формат. Когда случается инцидент, аналитику приходится подключаться к десяткам серверов, искать нужные файлы, разбираться с форматами.
@@ -11,11 +25,47 @@
 Vector — это инструмент для сбора, трансформации и отправки логов и метрик. Написан на Rust, что даёт высокую производительность при минимальном потреблении ресурсов.
 
 Почему именно Vector:
+__Производительность.__ Обрабатывает до 10 ТБ данных в день на одном сервере. Для сравнения: Logstash на тех же задачах потребляет в 10 раз больше памяти.
 
-- __Производительность.__ Обрабатывает до 10 ТБ данных в день на одном сервере. Для сравнения: Logstash на тех же задачах потребляет в 10 раз больше памяти.
-- __Единый конфиг.__ Один TOML/YAML файл описывает весь pipeline. Не нужно изучать несколько инструментов.
-- __Богатый язык трансформаций.__ VRL (Vector Remap Language) позволяет парсить, фильтровать и обогащать данные без внешних скриптов.
-- __Надёжность.__ Буферизация на диске, at-least-once доставка, автоматическое переподключение.
+__Единый конфиг.__ Один TOML/YAML файл описывает весь pipeline. Не нужно изучать несколько инструментов.
+
+__Богатый язык трансформаций.__ VRL (Vector Remap Language) позволяет парсить, фильтровать и обогащать данные без внешних скриптов.
+
+__Надёжность.__ Буферизация на диске, at-least-once доставка, автоматическое переподключение.
+
+## Установка Vector
+
+Vector распространяется как Docker-образ. Для работы с заданиями этого блока вам понадобится образ версии `0.52.0-alpine`.
+
+Для тестов можно установить Vector с [официального сайта](https://vector.dev/), но требуется VPN. Гораздо лучше для тренировок использовать [VRL Playground](https://playground.vrl.dev/).
+
+### Скачивание образа
+
+Выполните команду для скачивания образа:
+
+```bash
+docker pull timberio/vector:0.52.0-alpine
+```
+
+Проверьте, что образ успешно скачан:
+
+```bash
+docker images | grep vector
+```
+
+Вы должны увидеть строку с `timberio/vector` и тегом `0.52.0-alpine`.
+
+### Проверка установки
+
+Убедитесь, что Vector работает корректно:
+
+```bash
+docker run --rm timberio/vector:0.52.0-alpine --version
+```
+
+Команда должна вывести версию Vector (например, `0.52.0`).
+
+> __Примечание:__ В заданиях этого блока мы используем конкретную версию образа (`0.52.0-alpine`) для обеспечения воспроизводимости результатов. Если вы используете `docker-compose.yml`, образ будет скачан автоматически при первом запуске.
 
 ## Архитектура: Sources → Transforms → Sinks
 
@@ -129,11 +179,23 @@ source = '''
 type = "remap"
 inputs = ["nginx_logs"]
 source = '''
-. |= parse_regex!(.message, r'^(?P<ip>\S+) - - \[(?P<timestamp>[^\]]+)\] "(?P<method>\S+) (?P<path>\S+) \S+" (?P<status>\d+) (?P<size>\d+)')
+# Парсим nginx combined log format
+# Формат: IP - - [timestamp] "method path protocol" status size "referer" "user_agent"
+. |= parse_regex!(
+    .message,
+    r'^(?P<source_ip>\S+)\s+-\s+-\s+\[(?P<timestamp>[^\]]+)\]\s+"(?P<method>\S+)\s+(?P<path>\S+)\s+[^"]+"\s+(?P<status>\d+)\s+(?P<size>\d+)\s+"(?P<referer>[^"]*)"\s+"(?P<user_agent>[^"]*)"'
+)
+
+# Преобразуем типы
+.status = to_int!(.status)
+.size = to_int!(.size)
+
+# Парсим timestamp
+.timestamp = parse_timestamp!(.timestamp, format: "%d/%b/%Y:%H:%M:%S %z")
 '''
 ```
 
-Оператор `|=` добавляет извлечённые поля к событию.
+Оператор `|=` добавляет извлечённые поля к событию. В regex используйте именованные группы `(?P<имя_поля>паттерн)` для извлечения полей.
 
 ### Фильтрация
 
@@ -317,42 +379,288 @@ Vector выигрывает по соотношению производител
 - [VRL Reference](https://vector.dev/docs/reference/vrl/)
 - [Vector Examples](https://vector.dev/docs/reference/configuration/examples/)
 
+## Форматы логов в FinanceFlow
+
+В инфраструктуре FinanceFlow используются четыре типа логов, каждый со своим форматом:
+
+### 1. Auth Events (JSON)
+
+События аутентификации в формате JSON. Используются приложениями для логирования входов, выходов и неудачных попыток.
+
+__Пример:__
+```json
+{"timestamp": "2024-03-08T03:47:22.456Z", "event_type": "login_success", "username": "dev_sergey", "source_ip": "192.168.1.100", "success": true, "details": {"method": "password", "user_agent": "Mozilla/5.0"}}
+```
+
+### 2. Nginx Logs (Combined Log Format)
+
+Логи веб-сервера nginx в стандартном Combined Log Format.
+
+__Пример:__
+```
+203.0.113.42 - - [01/Mar/2024:10:15:32 +0000] "GET /admin HTTP/1.1" 403 162 "-" "Mozilla/5.0 (compatible; Nmap Scripting Engine)"
+```
+
+Формат: `IP - - [timestamp] "method path protocol" status size "referer" "user_agent"`
+
+### 3. DNS Queries (BIND query log)
+
+DNS-запросы в формате BIND query log.
+
+__Пример:__
+```
+12-Mar-2024 14:23:45.123 client @0x7f9b2c001a00 192.168.1.100#54321 (x7kj2m9p.data-sync.xyz): query: x7kj2m9p.data-sync.xyz IN A +E(0)K (8.8.8.8)
+```
+
+Формат: `timestamp client @client_id source_ip#port (domain): query: domain IN TYPE flags (resolver)`
+
+### 4. Firewall Events (CEF)
+
+События фаервола в формате CEF (Common Event Format).
+
+__Пример:__
+```
+Mar 01 10:15:32 fw-gateway CEF:0|FinanceFlow|Firewall|1.0|200|Connection block|7|src=203.0.113.42 dst=192.168.1.10 spt=45678 dpt=22 proto=TCP act=block reason=port_scan
+```
+
+Формат: `timestamp hostname CEF:version|vendor|product|version|event_id|action|severity|extensions`
+
 ## Практические задания
 
-### Задание 2.1: Парсинг и обработка логов
+### Задание 2.1: Настройка генератора логов
 
-Настройте Vector для обработки логов веб-сервера.
+Перед настройкой Vector нужно запустить генератор логов, который будет создавать события в реальном времени.
 
-В директории `data/` находится файл `nginx_access.log` с логами в combined-формате. Ваша задача — создать конфигурацию Vector, которая:
-
-1. Читает логи из файла
-2. Парсит их с извлечением полей: IP, timestamp, method, path, status, size, user_agent
-3. Добавляет поле `severity`: "error" для статусов >= 400, "info" для остальных
-4. Выводит результат в консоль в JSON-формате
+1. Изучите структуру проекта: генератор находится в `lesson02/app/generate_logs_realtime.py`
+2. Создайте `docker-compose.yml` в директории `lesson02/` на основе эталонного решения
+3. Запустите генератор логов и убедитесь, что файлы создаются в общем volume
 
 __Чеклист выполнения:__
 
-- [ ] Создан файл `vector.toml` с конфигурацией
-- [ ] Vector успешно парсит логи (нет ошибок в выводе)
-- [ ] В JSON-выводе присутствуют все извлечённые поля
-- [ ] Поле `severity` корректно выставляется
+- [ ] Создан `docker-compose.yml` с сервисами `postgres`, `log-generator` и `vector`
+- [ ] Генератор успешно запускается и создаёт файлы логов
+- [ ] В директории `/logs` (в контейнере) появляются файлы: `auth_events.log`, `nginx_logs.log`, `dns_queries.log`, `firewall_events.log`
 
-### Задание 2.2: Маршрутизация в PostgreSQL
+### Задание 2.2: Парсинг auth_events (JSON)
 
-Расширьте конфигурацию из задания 2.1:
+Настройте Vector для парсинга событий аутентификации в формате JSON.
 
-1. Добавьте маршрутизацию: события с ошибками (status >= 400) и успешные запросы должны обрабатываться отдельно
-2. Добавьте обогащение: для ошибок добавьте поле `requires_attention = true`
-3. Отправьте все события в PostgreSQL (используйте базу из Блока 1)
+1. Создайте конфигурацию `vector-configs/auth_events.toml` на основе шаблона
+2. Реализуйте парсинг JSON из поля `.message`
+3. Преобразуйте timestamp в стандартный формат
+4. Добавьте поле `severity` на основе `event_type`
+5. Настройте отправку в PostgreSQL в таблицу `auth_events`
 
-__Требования к PostgreSQL:__
+__Пример входных данных:__
+```json
+{"timestamp": "2024-03-08T03:47:22.456Z", "event_type": "login_success", "username": "dev_sergey", "source_ip": "192.168.1.100", "success": true}
+```
 
-- Таблица `nginx_logs` с полями: timestamp, source_ip, method, path, status, size, user_agent, severity
-- Vector должен подключаться к той же базе `security_logs`
+__Полный пример конфигурации:__
+
+```toml
+[sources.auth_logs]
+type = "file"
+include = ["/logs/auth_events.log"]
+read_from = "beginning"
+
+[transforms.parse_auth]
+type = "remap"
+inputs = ["auth_logs"]
+source = '''
+# Шаг 1: Парсим JSON из .message
+# .message содержит строку с JSON, нужно распарсить её
+. = parse_json!(.message)
+
+# Шаг 2: Преобразуем timestamp
+# timestamp в формате ISO 8601 (например, "2024-03-08T03:47:22.456Z")
+# Формат "%+" означает ISO 8601
+.timestamp = parse_timestamp!(.timestamp, format: "%+")
+
+# Шаг 3: Добавляем severity на основе event_type
+if .event_type == "login_failure" {
+    .severity = "warning"
+} else if .event_type == "login_success" {
+    .severity = "info"
+} else {
+    .severity = "info"
+}
+
+# Шаг 4: Удаляем служебные поля Vector
+# Vector добавляет служебные поля .file, .host, .source_type
+del(.file)
+del(.host)
+del(.source_type)
+'''
+
+[sinks.postgres_auth]
+type = "postgres"
+inputs = ["parse_auth"]
+endpoint = "postgresql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}"
+table = "auth_events"
+healthcheck.enabled = true
+```
 
 __Чеклист выполнения:__
 
-- [ ] Конфигурация содержит маршрутизацию по статусу
-- [ ] Ошибки обогащаются дополнительными полями
-- [ ] Данные успешно записываются в PostgreSQL
-- [ ] В таблице `nginx_logs` появляются записи из лог-файла
+- [ ] JSON успешно парсится из `.message`
+- [ ] Timestamp корректно преобразуется
+- [ ] Поле `severity` добавляется на основе `event_type`
+- [ ] Данные записываются в PostgreSQL
+
+### Задание 2.3: Парсинг nginx_logs (Combined Log Format)
+
+Настройте Vector для парсинга логов nginx в Combined Log Format.
+
+1. Создайте конфигурацию `vector-configs/nginx_logs.toml`
+2. Реализуйте парсинг с помощью `parse_regex!` для извлечения всех полей
+3. Преобразуйте `status` и `size` в числа
+4. Парсите timestamp в формате nginx
+5. Добавьте `severity` на основе HTTP статуса
+
+__Чеклист выполнения:__
+
+- [ ] Все поля успешно извлекаются из лога
+- [ ] Типы данных корректно преобразуются
+- [ ] Timestamp парсится правильно
+- [ ] Данные записываются в PostgreSQL
+
+### Задание 2.4: Парсинг dns_queries (BIND query log)
+
+Настройте Vector для парсинга DNS-запросов в формате BIND query log.
+
+1. Создайте конфигурацию `vector-configs/dns_queries.toml`
+2. Реализуйте парсинг BIND формата с помощью regex
+3. Извлеките все поля: timestamp, source_ip, source_port, query_domain, query_type, resolver
+4. Преобразуйте `source_port` в число
+5. Парсите timestamp в формате BIND
+
+__Пример входных данных:__
+```
+12-Mar-2024 14:23:45.123 client @0x7f9b2c001a00 192.168.1.100#54321 (x7kj2m9p.data-sync.xyz): query: x7kj2m9p.data-sync.xyz IN A +E(0)K (8.8.8.8)
+```
+
+__Пример VRL кода для парсинга:__
+
+```toml
+source = '''
+# Извлекаем основные поля из BIND формата
+# Формат: timestamp client @0x... source_ip#port (domain): query: domain IN TYPE +flags (resolver)
+. |= parse_regex!(
+    .message,
+    r'^(?P<timestamp>[^\s]+\s+[^\s]+\s+[^\s]+)\s+client\s+@0x[^\s]+\s+(?P<source_ip>[^#]+)#(?P<source_port>\d+)\s+\((?P<query_domain>[^)]+)\):\s+query:\s+\S+\s+IN\s+(?P<query_type>\S+)\s+[^\s]+\s*(?:\((?P<resolver>[^)]+)\))?'
+)
+
+# Преобразуем source_port в число
+.source_port = to_int!(.source_port)
+
+# Парсим timestamp
+# Формат BIND: 12-Mar-2024 14:23:45.123
+.timestamp = parse_timestamp!(.timestamp, format: "%d-%b-%Y %H:%M:%S%.f")
+
+# Добавляем severity (для DNS обычно "info")
+.severity = "info"
+
+# Удаляем служебные поля
+del(.file)
+del(.host)
+del(.source_type)
+del(.message)
+'''
+```
+
+__Чеклист выполнения:__
+
+- [ ] Все поля успешно извлекаются
+- [ ] Timestamp парсится корректно
+- [ ] Данные записываются в PostgreSQL
+
+### Задание 2.5: Парсинг firewall_events (CEF)
+
+Настройте Vector для парсинга событий фаервола в формате CEF.
+
+1. Создайте конфигурацию `vector-configs/firewall_events.toml`
+2. Реализуйте парсинг CEF формата
+3. Извлеките основные поля из extensions с помощью `parse_key_value!`
+4. Преобразуйте `severity` из числа в строку
+5. Парсите timestamp в формате CEF
+
+__Пример входных данных:__
+```
+Mar 01 10:15:32 fw-gateway CEF:0|FinanceFlow|Firewall|1.0|200|Connection block|7|src=203.0.113.42 dst=192.168.1.10 spt=45678 dpt=22 proto=TCP act=block reason=port_scan
+```
+
+__Пример VRL кода для парсинга:__
+
+```toml
+source = '''
+# Шаг 1: Извлекаем основные поля и extensions
+# Формат: timestamp hostname CEF:version|vendor|product|version|event_id|action|severity|extensions
+. |= parse_regex!(
+    .message,
+    r'^(?P<timestamp>[^\s]+\s+[^\s]+\s+[^\s]+)\s+\S+\s+CEF:\d+\|[^|]+\|[^|]+\|[^|]+\|[^|]+\|[^|]+\|(?P<severity>\d+)\|(?P<extensions>.*)'
+)
+
+# Шаг 2: Парсим timestamp
+# Формат CEF: Mar 01 10:15:32
+.timestamp = parse_timestamp!(.timestamp, format: "%b %d %H:%M:%S")
+
+# Шаг 3: Парсим extensions (key=value пары)
+# extensions содержат пары вида "src=203.0.113.42 dst=192.168.1.10 ..."
+.extensions = parse_key_value!(.extensions, field_delimiter: " ", key_value_delimiter: "=")
+
+# Шаг 4: Извлекаем поля из extensions
+.source_ip = .extensions.src
+.dest_ip = .extensions.dst
+.source_port = to_int!(.extensions.spt)
+.dest_port = to_int!(.extensions.dpt)
+.protocol = .extensions.proto
+.action = .extensions.act
+.reason = .extensions.reason
+
+# Шаг 5: Преобразуем severity из числа в строку
+.severity_num = to_int!(.severity)
+if .severity_num >= 7 {
+    .severity = "error"
+} else if .severity_num >= 4 {
+    .severity = "warning"
+} else {
+    .severity = "info"
+}
+
+# Шаг 6: Удаляем временные поля
+del(.extensions)
+del(.severity_num)
+del(.file)
+del(.host)
+del(.source_type)
+del(.message)
+'''
+```
+
+__Чеклист выполнения:__
+
+- [ ] CEF формат успешно парсится
+- [ ] Extensions корректно извлекаются
+- [ ] Severity преобразуется правильно
+- [ ] Данные записываются в PostgreSQL
+
+### Задание 2.6: Объединение всех конфигураций
+
+Создайте единый файл `vector-configs/vector.toml`, который объединяет все четыре конфигурации и отправляет данные в соответствующие таблицы PostgreSQL.
+
+__Чеклист выполнения:__
+
+- [ ] Все четыре источника настроены
+- [ ] Все четыре трансформации работают корректно
+- [ ] Данные записываются во все четыре таблицы PostgreSQL
+- [ ] Проверено наличие данных в таблицах: `auth_events`, `nginx_logs`, `dns_queries`, `firewall_events`
+
+## Что дальше?
+
+После успешной настройки Vector вы сможете:
+- Централизованно собирать логи из разных источников
+- Парсить различные форматы логов
+- Отправлять данные в PostgreSQL для последующего анализа
+
+В следующем блоке мы научимся оптимизировать хранение данных и создавать индексы для быстрого поиска индикаторов атаки.

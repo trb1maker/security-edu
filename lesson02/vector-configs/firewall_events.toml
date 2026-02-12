@@ -1,0 +1,61 @@
+# Конфигурация Vector для парсинга firewall_events (CEF)
+#
+# TODO: Заполните недостающие части конфигурации
+
+# ============================================================================
+# ИСТОЧНИК: чтение файла логов
+# ============================================================================
+[sources.firewall_logs]
+type = "file"
+# TODO: Укажите путь к файлу firewall_events.log
+include = ["/logs/firewall_events.log"]
+read_from = "beginning"
+
+# ============================================================================
+# ТРАНСФОРМАЦИЯ: парсинг CEF
+# ============================================================================
+[transforms.parse_firewall]
+type = "remap"
+inputs = ["firewall_logs"]
+source = '''
+# TODO: Распарсите CEF формат с помощью parse_regex!
+# Формат: timestamp hostname CEF:0|vendor|product|version|event_id|action|severity|extensions
+# Пример: Mar 01 10:15:32 fw-gateway CEF:0|FinanceFlow|Firewall|1.0|200|Connection block|7|src=203.0.113.42 dst=192.168.1.10 spt=45678 dpt=22 proto=TCP act=block reason=port_scan
+# Подсказка: извлеките timestamp, severity и extensions (key=value пары)
+
+# TODO: Парсите timestamp
+# Формат CEF: Mar 01 10:15:32
+# Подсказка: используйте parse_timestamp!(.timestamp, format: "%b %d %H:%M:%S")
+
+# TODO: Парсите extensions (key=value пары)
+# Подсказка: используйте parse_key_value!(.extensions, field_delimiter: " ", key_value_delimiter: "=")
+
+# TODO: Извлеките основные поля из extensions
+# - source_ip из .extensions.src
+# - dest_ip из .extensions.dst
+# - source_port из .extensions.spt (преобразуйте в число)
+# - dest_port из .extensions.dpt (преобразуйте в число)
+# - protocol из .extensions.proto
+# - action из .extensions.act
+# - reason из .extensions.reason
+
+# TODO: Преобразуйте severity из числа в строку
+# - severity >= 7 -> "error"
+# - severity >= 4 -> "warning"
+# - остальные -> "info"
+
+# TODO: Удалите служебные поля (.file, .host, .source_type, .message, .extensions)
+'''
+
+# ============================================================================
+# ПРИЁМНИК: отправка в PostgreSQL
+# ============================================================================
+[sinks.postgres_firewall]
+type = "postgres"
+inputs = ["parse_firewall"]
+# TODO: Настройте подключение к PostgreSQL
+# Используйте переменные окружения: ${DB_USER}, ${DB_HOST}, ${DB_PORT}, ${DB_NAME}, ${DB_PASSWORD}
+# Подсказка: пароль нужно включить в URL: postgresql://user:password@host:port/database
+endpoint = "postgresql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}"
+table = "firewall_events"
+healthcheck.enabled = true

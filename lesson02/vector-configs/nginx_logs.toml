@@ -1,0 +1,52 @@
+# Конфигурация Vector для парсинга nginx_logs (Combined Log Format)
+#
+# TODO: Заполните недостающие части конфигурации
+
+# ============================================================================
+# ИСТОЧНИК: чтение файла логов
+# ============================================================================
+[sources.nginx_logs]
+type = "file"
+# TODO: Укажите путь к файлу nginx_logs.log
+include = ["/logs/nginx_logs.log"]
+read_from = "beginning"
+
+# ============================================================================
+# ТРАНСФОРМАЦИЯ: парсинг Combined Log Format
+# ============================================================================
+[transforms.parse_nginx]
+type = "remap"
+inputs = ["nginx_logs"]
+source = '''
+# TODO: Распарсите nginx combined log format с помощью parse_regex!
+# Формат: IP - - [timestamp] "method path protocol" status size "referer" "user_agent"
+# Подсказка: используйте именованные группы в regex: (?P<field_name>...)
+# Пример regex: r'^(?P<source_ip>\S+)\s+-\s+-\s+\[(?P<timestamp>[^\]]+)\]\s+...'
+
+# TODO: Преобразуйте status и size в числа
+# Подсказка: используйте to_int!(.status) и to_int!(.size)
+
+# TODO: Парсите timestamp
+# Формат nginx: 15/Jan/2024:10:15:32 +0000
+# Подсказка: используйте parse_timestamp!(.timestamp, format: "%d/%b/%Y:%H:%M:%S %z")
+
+# TODO: Добавьте severity на основе HTTP статуса
+# - status >= 500 -> "error"
+# - status >= 400 -> "warning"
+# - остальные -> "info"
+
+# TODO: Удалите служебные поля (.file, .host, .source_type, .message)
+'''
+
+# ============================================================================
+# ПРИЁМНИК: отправка в PostgreSQL
+# ============================================================================
+[sinks.postgres_nginx]
+type = "postgres"
+inputs = ["parse_nginx"]
+# TODO: Настройте подключение к PostgreSQL
+# Используйте переменные окружения: ${DB_USER}, ${DB_HOST}, ${DB_PORT}, ${DB_NAME}, ${DB_PASSWORD}
+# Подсказка: пароль нужно включить в URL: postgresql://user:password@host:port/database
+endpoint = "postgresql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}"
+table = "nginx_logs"
+healthcheck.enabled = true

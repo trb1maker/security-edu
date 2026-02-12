@@ -1,0 +1,3 @@
+[submodule "security-edu-solutions"]
+	path = security-edu-solutions
+	url = git@github.com:trb1maker/security-edu-solutions.git
