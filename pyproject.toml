@@ -1,6 +1,6 @@
 [project]
 name = "security-edu"
-version = "0.1.0"
+version = "0.2.0"
 description = "Аналитика и аналитическая инфраструктура в сфере информационной безопасности"
 readme = "README.md"
 requires-python = ">=3.14"
@@ -22,7 +22,4 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = [
-    "black>=25.12.0",
-    "ruff>=0.14.11",
-]
+dev = ["black>=25.12.0", "ruff>=0.14.11"]
